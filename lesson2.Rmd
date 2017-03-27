@@ -1,7 +1,7 @@
 ---
 title: "Rna-seq analysis"
-author: "kzaitsev"
-date: "March 11, 2017"
+author: "aslepchenkov"
+date: "March 28, 2017"
 output: html_document
 ---
 
@@ -12,7 +12,8 @@ library(clusterProfiler)
 library(org.Hs.eg.db)
 library(pheatmap)
 library(plotly)
-options(width=120)
+library(dplyr)
+options(width = 120)
 ```
 
 ## Файлы с которыми будем работать сегодня
@@ -132,20 +133,14 @@ plotPCA(vst_dds, intgroup=c("tissue", "cells")) + theme_bw()
 
 ```{r diff_exp}
 
-res <- results(dds)
-mcols(res)$description
-res <- res[order(res[, 4]), ]
-res
+cell_res <- results(dds)
+mcols(cell_res)$description
+cell_res <- cell_res[order(res[, 4]), ]
 
-dds2 <- makeExampleDESeqDataSet(m=4)  # Почему блин в примере все работает, а на практике нет
-dds2 <- DESeq(dds2)
-resultsNames(dds2)
-res <- results(dds2, contrast=c("condition","B","A"))
 
-tissues <- results(dds, contrast = c("tissue", "tissue..NBP", "tissue..breast.tumor"))
-cells <- results(dds, contrast = c("cells", "cell.type..Regulatory.T.cells", "cell.type..Conventional.CD4.T.cells"))
-cell <- results(dds, name = c("cellscell.type..Regulatory.T.cells"))  # Зато такой вариант работает, но непонятно что он сравнивает
-
+tissue_res <- results(dds, contrast = list("tissuetissue..NBP", "tissuetissue..breast.tumor"))
+mcols(tissue_res)$description
+tissue_res <- tissue_res[order(tissue_res[, 4]), ]
 ```
 
 Самый обычный способ визуализировать данные дифф.экспрессии -- это volcano plot. По оси x мы будем откладывать log fold change, а по y - adjusted p value.
@@ -157,29 +152,33 @@ geom_hline и scale_color_manual
 
 ```{r volcano_plot}
 cell_types_data <- data.frame(
-  x = res$log2FoldChange,
-  y = -log10(res$padj),
-  significance = ifelse(res$padj < 0.01, "significant", "nonsignificant")
+  x = cell_res$log2FoldChange,
+  y = -log10(cell_res$padj),
+  significance = ifelse(cell_res$padj < 0.01, "significant", "nonsignificant"),
+  comparison_type = "Tregs vs Tconvs"
 )
 
 
+tissue_types_data <- data.frame(
+  x = tissue_res$log2FoldChange,
+  y = -log10(tissue_res$padj),
+  significance = ifelse(tissue_res$padj < 0.01, "significant", "nonsignificant"),
+  comparison_type = "Normal Tissue vs Breast Tumor"
+)
 
-# cell_types_data <- data.frame(
-  # x=res$log2FoldChange,
-  # y=-log10(res$padj),
-  # significance=ifelse(res$padj < 0.01, "significant", "nonsignificant")
-# )
+merged <- rbind(cell_types_data, tissue_types_data)
 
-ggplot(data=gdata, aes(x=x, y=y, colour = significance)) +
+ggplot(data=merged, aes(x=x, y=y, colour = significance)) +
   geom_point(size=1) + theme_bw()  +
   xlab("Log fold change") +
   ylab("Adjusted p.value") + 
   scale_color_manual(values = c( "nonsignificant" = "black", "significant" = "red"), limits = c("nonsignificant", "significant")) +
   geom_hline(aes(yintercept = -log10(0.01))) + 
-  facet_grid()
+  facet_grid(. ~ comparison_type)
 
   
 ```
+
 
 Также мы можем построить тепловую карту отсортировав гены по статистике
 
@@ -200,6 +199,38 @@ pheatmap(to_visualise,
 # dev.off()
 
 ```
+
+
+```{r get pathway genes}
+kkeys <- keys(org.Hs.eg.db, keytype = "ENSEMBL")
+goAnno <- AnnotationDbi::select(org.Hs.eg.db, keys = kkeys, 
+                                keytype = "ENSEMBL", columns = c("GOALL", "ONTOLOGYALL", "SYMBOL"))
+goAnno <- tbl_df(goAnno)
+goAnno <- filter(goAnno, GOALL == "GO:0007159")
+# or you can pick ENTREZ, or SYMBOL, or whatever you want
+genesToVisualise <- goAnno$ENSEMBL
+```
+От вас же требуется отсортировать эти гены в порядке их статистики (колонка stat) дифф. экспрессии в табличке res, и затем построить тепловую карту экспрессии этих генов в этом порядке. Ожидается увидеть что-то в духе:
+```{r}
+ordered_genes_to_visualise = na.omit(genesToVisualise[order(cell_res$stat)])
+
+counts.norm <- counts(dds, normalized=TRUE)
+counts.norm <- counts.norm[rownames(counts.norm) %in% genesToVisualise]
+to_visualise <- counts.norm[order(counts.norm)]
+# Эта задача сильнее меня
+# to_visualise <- counts.norm[rownames(cell_res), order(conditions[, 2])]
+
+to_visualise <- t(apply(to_visualise, 1, function(r) {
+  (r - min(r)) / (max(r) - min(r))
+}))
+
+pheatmap(to_visualise, 
+         show_rownames = F, cluster_rows = F,
+         cluster_cols=F)
+```
+
+
+
 
 # clusterProfiler
 
