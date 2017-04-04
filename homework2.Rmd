@@ -1,0 +1,46 @@
+---
+title: "Clusterization. Homework"
+author: "aslepchenkov"
+date: "April 4, 2017"
+output: html_document
+---
+
+```{r setup, message=FALSE}
+library(DESeq2)
+library(ggplot2)
+library(pheatmap)
+library(amap)
+library(dbscan)
+options(width=120)
+```
+
+
+
+```{r load}
+counts <- read.csv("GSE89225_Illumina_counts.csv", row.names=1)
+conditions <- read.csv("conditions.csv", row.names=1)
+mart <- read.table("human_mart.txt", sep="\t", header=1, check.names = F)
+```
+
+Возьмем весь датасет с аутлаером
+Создадим DeseqDataSet объект (дизайн не важен)
+Оставим только 8000 экспрессированых генов
+Используем rlog(dds) для получения логарифмированных значений экспрессии
+Посчитаем корреляции между образцами используя cor (результатом будет матрица размера m×mm×m, где m – количество образцов)
+Посчитаем матрицу “непохожести” 1 - cor, и dist объект для этой матрицы
+Сделаем кластеризацию с помощью функции hclust, используя три разных метода “связывания” объектов в группы: average, complete and single
+Построим для каждой график с помощью plot
+```{r deseq_prep, cache=TRUE, message=FALSE}
+dds <- DESeqDataSetFromMatrix(countData = counts,
+                              colData = conditions,
+                              design = ~ tissue + cells)
+dds <- dds[rowSums(counts(dds)) > 20, ]
+dds <- DESeq(dds)
+vst_dds <- vst(dds)
+counts.norm <- assay(vst_dds)
+head(dds[1:8000])
+small_dds <- dds[1:8000]
+rld <- rlog(small_dds)
+res <- results(small_dds)
+cor(as.matrix(small_dds))
+```
