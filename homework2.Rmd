@@ -40,7 +40,42 @@ vst_dds <- vst(dds)
 counts.norm <- assay(vst_dds)
 head(dds[1:8000])
 small_dds <- dds[1:8000]
-rld <- rlog(small_dds)
-res <- results(small_dds)
-cor(as.matrix(small_dds))
+rld <- rlog(small_dds, blind = T)
+rld_cor <- cor(assay(rld))
+rld_cor_reverse <- 1 - rld_cor 
+rld_dist <- dist(rld_cor_reverse)
+
+complete_hclust <- hclust(rld_dist, method = "complete")
+average_hclust <- hclust(rld_dist, method = "average")
+single_hclust <- hclust(rld_dist, method = "single")
+
+plot(complete_hclust, main = "Complete hclust")
+plot(average_hclust, main = "Average hclust")
+plot(single_hclust, main = "Single hclust")
+?plot
+```
+
+
+
+
+Используем K-means для описания паттернов экспрессии
+
+Возьмем весь датасет без аутлаера
+Создадим DeseqDataSet объект (дизайн не важен)
+Оставим только 8000 экспрессированных генов
+Используем rlog(dds) для получения логарифмированных значений экспрессии
+Используем функцию Kmeans из пакета amap с методом “correlation”, c количеством кластеров равным 6. (Вы можете выбрать своё количество кластеров), и максимальным количеством итераций равным 20000
+После этого вы можете достать соотвествие каждого гена кластеру с помощью элемента листа с названием “cluster”
+После этого от вас потребуется эту кластеризацию изобразить на хитмапе: гены должны быть отсортированы по кластерам, а столбцы сначала по клеткам, а затем по тканям.
+Пример использования функции Kmeans:
+
+clustering <- Kmeans(rld, 6, method="correlation", iter.max=20000)
+head(clustering$cluster)
+
+```{r deseq_prep, cache=TRUE, message=FALSE}
+clustering <- Kmeans(assay(rld), 6, method="correlation", iter.max=20000)
+clustering
+
+heatmap()
+?Kmeans
 ```
