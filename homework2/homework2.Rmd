@@ -1,0 +1,105 @@
+---
+title: "Clusterization. Homework"
+author: "aslepchenkov"
+date: "April 4, 2017"
+output: html_document
+---
+
+```{r setup, message=FALSE}
+library(DESeq2)
+library(ggplot2)
+library(pheatmap)
+library(amap)
+library(dbscan)
+options(width = 120)
+```
+
+
+
+```{r load}
+counts_full <- read.csv("../GSE89225_Illumina_counts.csv", row.names = 1)
+conditions_full <- read.csv("../conditions.csv", row.names = 1)
+```
+
+## Hclust clustering
+```{r hclust, cache=TRUE, message=FALSE}
+dds_full <- DESeqDataSetFromMatrix(countData = counts_full,
+                              colData = conditions_full,
+                              design = ~ tissue + cells)
+dds_full <- dds_full[rowSums(counts(dds_full)) > 20, ]  # Select genes with relevant expression
+dds_full <- dds_full[order(rowSums(counts(dds_full)), decreasing = T), ]  # Order by expression level
+dds_subset <- dds_full[1:8000]  
+dds_subset <- DESeq(dds_subset)
+
+rld <- rlog(dds_subset, blind = T)  # Normalize data
+rld_cor <- cor(assay(rld))
+rld_cor_reverse <- 1 - rld_cor 
+rld_dist <- dist(rld_cor_reverse)
+
+complete_hclust <- hclust(rld_dist, method = "complete")
+average_hclust <- hclust(rld_dist, method = "average")
+single_hclust <- hclust(rld_dist, method = "single")
+
+plot(complete_hclust, main = "Complete hclust")
+plot(average_hclust, main = "Average hclust")
+plot(single_hclust, main = "Single hclust")
+
+```
+
+
+## K-means clustering
+
+```{r k-means, cache=TRUE, message=FALSE}
+# Remove outlier
+counts_wo_outlier <- counts_full
+counts_wo_outlier$treg_NBP_patient3 <- NULL  
+conditions_wo_outlier <- conditions_full[rownames(conditions_full) != "treg_NBP_patient3",]
+
+dds_wo_outlier <- DESeqDataSetFromMatrix(countData = counts_wo_outlier,
+                              colData = conditions_wo_outlier,
+                              design = ~ tissue + cells)
+dds_wo_outlier <- dds_wo_outlier[rowSums(counts(dds_wo_outlier)) > 20, ]  # Select genes with relevant expression
+dds_wo_outlier <- dds_wo_outlier[order(rowSums(counts(dds_wo_outlier)), decreasing = T), ]  # Order by expression level
+dds_wo_outlier_subset <- dds_wo_outlier[1:8000]
+dds_wo_outlier_subset <- DESeq(dds_wo_outlier_subset)
+
+rld_wo_outlier <- assay(rlog(dds_wo_outlier_subset, blind = T))  # Normalize data
+
+clustering_wo_outlier <- Kmeans(rld_wo_outlier, 6, method = "correlation", iter.max = 20000)
+
+ordered_rld_wo_outlier <- rld_wo_outlier[order(clustering_wo_outlier$cluster), 
+                        order(conditions_wo_outlier$cells, conditions_wo_outlier$tissue)]
+
+to_visualise <- t(apply(ordered_rld_wo_outlier, 1, function(r) {
+  (r - min(r)) / (max(r) - min(r))
+}))
+
+clusters_df <- data.frame("cluster" = as.factor(clustering_wo_outlier$cluster))
+
+pheatmap(to_visualise, 
+         show_rownames = F, cluster_rows = F,
+         cluster_cols = F,
+         annotation_col = conditions_wo_outlier, 
+         annotation_row = clusters_df,
+         main = "GO:0007159: leukocyte cell-cell adhesion")
+```
+
+
+## Dbscan clustering
+
+```{r dbscan, message=FALSE, warning=FALSE}
+projection <- read.csv("../projection.csv")
+data <- data.frame("TSNE1" = projection$TSNE.1, "TSNE2" = projection$TSNE.2)
+
+ggplot(data, aes(x = TSNE1, y = TSNE2)) +
+  geom_point() + 
+  ggtitle("Without clusterization")
+
+clusters <- dbscan(data, eps = 3, minPts = 5, weights = NULL, borderPoints = TRUE)
+Cluster <- as.factor(clusters$cluster)
+
+ggplot(data, aes(x = TSNE1, y = TSNE2, col = Cluster)) +
+  geom_point() + 
+  ggtitle("Dbscan clusterization")
+```
+
