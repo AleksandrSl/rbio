@@ -4,6 +4,7 @@ author: "aslepchenkov"
 date: "April 8, 2017"
 output: html_document
 ---
+## First Round
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -12,17 +13,18 @@ library(ggplot2)
 library(pheatmap)
 library(plotly)
 library(amap)
+library(VennDiagram)
 library(dbscan)
 options(width = 120)
 ```
 
 ```{r load_data, message=FALSE, warning=FALSE}
-counts <- read.table('FirstBlood/Data/GSE89633_counts.tsv', sep = '\t', row.names = 1, header=1)
-conditions <- read.table('FirstBlood/Data/GSE89633_conditions.tsv', sep = '\t', row.names = 1, header=1)
+counts <- read.table('Data/GSE89633_counts.tsv', sep = '\t', row.names = 1, header=1)
+conditions <- read.table('Data/GSE89633_conditions.tsv', sep = '\t', row.names = 1, header=1)
 ```
 
 
-```{r dds cache=TRUE}
+```{r dds, cache=TRUE}
 dds <- DESeqDataSetFromMatrix(countData = counts,
                               colData = conditions,
                               design = ~ cells + conditions)
@@ -52,17 +54,16 @@ ggplotly(ggplot(data=gdata, aes(x=x, y=y, color=cells, shape=conditions, text=na
   xlab(paste0("PC", 1, ": ", formatC(100 * percents[1], digits=4), "%")) +
   ylab(paste0("PC", 2, ": ", formatC(100 * percents[2], digits=4), "%")))
 
-plotPCA(vst_dds, intgroup=c("tissue", "cells")) + theme_bw()
 ```
 
-```{r}
+```{r heatmap, cache=TRUE}
 
 dds <- dds[order(rowSums(counts(dds)), decreasing = T), ]  # Order by expression level
 dds_highly_expr <- dds[1:8000]  
 dds_highly_expr <- DESeq(dds_highly_expr)
 
-vst_dds_highly_expr <- vst(dds_highly_expr)
-highly_expr_counts.norm <- assay(vst_dds_highly_expr)
+rld_dds_highly_expr <- rlog(dds_highly_expr, blind=T)
+highly_expr_counts.norm <- assay(rld_dds_highly_expr)
 
 clustering_highly_expr <- Kmeans(highly_expr_counts.norm, 8, method = "correlation", iter.max = 20000)
 
@@ -75,7 +76,7 @@ to_visualise <- t(apply(highly_expr_ordered_by_count, 1, function(r) {
 
 clusters_df <- data.frame("cluster" = as.factor(clustering_highly_expr$cluster))
 
-png("FirstBlood/heatmap_large.png", width=6, height=20, units="in", res=300)
+#png("FirstBlood/heatmap_large.png", width=6, height=20, units="in", res=300)
 pheatmap(to_visualise, 
          show_rownames = F, cluster_rows = F,
          cluster_cols = F,
@@ -83,14 +84,119 @@ pheatmap(to_visualise,
          annotation_row = clusters_df,
          main = "GO:0007159: leukocyte cell-cell adhesion")
 
-dev.off()
-
-
+#dev.off()
 ```
 
 Судя по heatmap SampleG и SampleO ведут себя немного странно, но на аутлаеров они не очень похожи
 
 
+## Second Round
+
+```{r part_by_cell_type, cache=TRUE}
+conditions_fb <- conditions[conditions$cells == "cell type: FB",]
+conditions_fap <- conditions[conditions$cells == "cell type: FAP",]
+conditions_smp <- conditions[conditions$cells == "cell type: SMP",]
+
+counts_fb <- counts[,rownames(conditions_fb)]
+counts_fap <- counts[,rownames(conditions_fap)]
+counts_smp <- counts[,rownames(conditions_smp)]
+```
+
+```{r FB, cache=TRUE}
+
+dds_fb <- DESeqDataSetFromMatrix(countData = counts_fb,
+                              colData = conditions_fb,
+                              design = ~ conditions)
+dds_fb <- dds_fb[rowSums(counts(dds_fb)) > 20, ]
+dds_fb <- DESeq(dds_fb)
+vst_dds_fb <- vst(dds_fb)
+counts.norm_fb <- assay(vst_dds_fb)
+results_fb <- results(dds_fb)
+
+```
 
 
+```{r FAP, cache=TRUE}
+
+dds_fap <- DESeqDataSetFromMatrix(countData = counts_fap,
+                              colData = conditions_fap,
+                              design = ~ conditions)
+dds_fap <- dds_fap[rowSums(counts(dds_fap)) > 20, ]
+dds_fap <- DESeq(dds_fap)
+vst_dds_fap <- vst(dds_fap)
+counts.norm_fap <- assay(vst_dds_fap)
+results_fap <- results(dds_fap)
+
+```
+
+```{r SMP, cache=TRUE}
+
+dds_smp <- DESeqDataSetFromMatrix(countData = counts_smp,
+                              colData = conditions_smp,
+                              design = ~ conditions)
+dds_smp <- dds_smp[rowSums(counts(dds_smp)) > 20, ]
+dds_smp <- DESeq(dds_smp)
+vst_dds_smp <- vst(dds_smp)
+counts.norm_smp <- assay(vst_dds_smp)
+results_smp <- results(dds_smp)
+
+```
+
+```{r volcano, cache=TRUE}
+fap_data <- data.frame(
+  x = results_fap$log2FoldChange,
+  y = -log10(results_fap$padj),
+  significance = ifelse(results_fap$padj < 0.01, "significant", "nonsignificant"),
+  comparison_type = "FB WT vs FB DKO"
+)
+
+fb_data <- data.frame(
+  x = results_fb$log2FoldChange,
+  y = -log10(results_fb$padj),
+  significance = ifelse(results_fb$padj < 0.01, "significant", "nonsignificant"),
+  comparison_type = "FAP WT vs FAP DKO"
+)
+
+smp_data <- data.frame(
+  x = results_smp$log2FoldChange,
+  y = -log10(results_smp$padj),
+  significance = ifelse(results_smp$padj < 0.01, "significant", "nonsignificant"),
+  comparison_type = "SMP WT vs SMP DKO"
+)
+
+
+merged <- rbind(fap_data, fb_data, smp_data)
+
+ggplot(data=merged, aes(x=x, y=y, colour = significance)) +
+  geom_point(size=1) + theme_bw()  +
+  xlab("Log fold change") +
+  ylab("Adjusted p.value") + 
+  scale_color_manual(values = c( "nonsignificant" = "black", "significant" = "red"), limits = c("nonsignificant", "significant")) +
+  geom_hline(aes(yintercept = -log10(0.01))) + 
+  facet_grid(. ~ comparison_type)
+```
+
+```{r venn, cache=TRUE}
+results_fap = na.omit(results_fap)  # remove all entries without padj and other columns
+results_fap_significant = results_fap[results_fap$padj < 0.01, ]
+
+results_smp = na.omit(results_smp)  # remove all entries without padj and other columns
+results_smp_significant = results_smp[results_smp$padj < 0.01, ]
+
+results_fb = na.omit(results_fb)  # remove all entries without padj and other columns
+results_fb_significant = results_fb[results_fb$padj < 0.01, ]
+
+results_fb_genes <- rownames(results_fb_significant)
+results_fap_genes <- rownames(results_fap_significant)
+results_smp_genes <- rownames(results_smp_significant)
+
+common_fb_fap <- intersect(results_fap_genes, results_fb_genes)
+common_fb_smp <- intersect(results_fb_genes, results_smp_genes)
+common_fap_smp <- intersect(results_smp_genes, results_fap_genes)
+
+common_fb_fap_smp <- intersect(common_fb_smp, results_fap_genes)
+
+draw.triple.venn(length(results_fb_genes), length(results_smp_genes), length(results_fap_genes), length(common_fb_smp), length(common_fap_smp), length(common_fb_fap), length(common_fb_fap_smp), category = c("FAB", "FAP", "SMP"))
+
+```
 
