@@ -1,0 +1,16 @@
+base
+BiocGenerics
+S4Vectors
+IRanges
+GenomeInfoDb
+GenomicRanges
+Biobase
+SummarizedExperiment
+DESeq2
+ggplot2
+pheatmap
+plotly
+amap
+futile.logger
+VennDiagram
+dbscan
