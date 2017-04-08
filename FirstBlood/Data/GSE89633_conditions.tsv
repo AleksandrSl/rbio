@@ -1,0 +1,21 @@
+	cells	conditions
+Sample_B.bam	cell type: FAP	condition: DKO
+Sample_BB.bam	cell type: FAP	condition: WT
+Sample_D.bam	cell type: FB	condition: DKO
+Sample_DD.bam	cell type: FB	condition: WT
+Sample_F.bam	cell type: FAP	condition: DKO
+Sample_FF.bam	cell type: FAP	condition: WT
+Sample_G.bam	cell type: SMP	condition: DKO
+Sample_H.bam	cell type: FB	condition: DKO
+Sample_HH.bam	cell type: FB	condition: WT
+Sample_J.bam	cell type: FAP	condition: DKO
+Sample_JJ.bam	cell type: FAP	condition: WT
+Sample_KK.bam	cell type: SMP	condition: WT
+Sample_L.bam	cell type: FB	condition: DKO
+Sample_LL.bam	cell type: FB	condition: WT
+Sample_N.bam	cell type: FAP	condition: DKO
+Sample_NN.bam	cell type: FAP	condition: WT
+Sample_O.bam	cell type: SMP	condition: DKO
+Sample_OO.bam	cell type: SMP	condition: WT
+Sample_P.bam	cell type: FB	condition: DKO
+Sample_PP.bam	cell type: FB	condition: WT
