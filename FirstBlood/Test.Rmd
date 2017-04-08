@@ -82,12 +82,14 @@ pheatmap(to_visualise,
          cluster_cols = F,
          annotation_col = conditions, 
          annotation_row = clusters_df,
-         main = "GO:0007159: leukocyte cell-cell adhesion")
+         main = "Some experiment")
 
 #dev.off()
 ```
 
 Судя по heatmap SampleG и SampleO ведут себя немного странно, но на аутлаеров они не очень похожи
+Точно сказать не можем, так как в каждой группе образцы и с нокаутом и без, хотя по типу клеток они разделяются, но это не удивительно.
+
 
 
 ## Second Round
@@ -175,6 +177,7 @@ ggplot(data=merged, aes(x=x, y=y, colour = significance)) +
   geom_hline(aes(yintercept = -log10(0.01))) + 
   facet_grid(. ~ comparison_type)
 ```
+Везде примерно одинаковые изменения, причем довольно сильные
 
 ```{r venn, cache=TRUE}
 results_fap = na.omit(results_fap)  # remove all entries without padj and other columns
