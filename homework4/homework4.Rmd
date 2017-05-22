@@ -12,43 +12,39 @@ library(rattle)
 library(tidyr)
 library(rpart.plot)
 library(RColorBrewer)
+library(ggplot2)
 ```
 
-```{r}
-ages <- read.table("ages.tsv", sep="\t", header=1)
-head(ages)
-methylation <- read.table("methylation.tsv", sep="\t", header=1, row.names = 1, na.strings = "NA")
-print(methylation[1:5, 1:5])
-methylation[is.na(methylation)] = 0  # Change NA to 0
-
-Переподготовка:
-
+# Преподготовка:
 Для каждого сайта метилирования, посчитать корреляцию между долей метилирования этого сайта в доноре и возрасте донора.
-Оставить только 10 самых скоррелированных сайтов. Под самыми скоррелированными мы понимаем абсолютное значение корреляции.
+Оставить только 10 самых скоррелированных сайтов. Под самыми скоррелированными мы понимаем абсолютное значение корреляции. Непараметрический тест Спирмана, показал себя лучше Пирсона.
 
-
-
-cor_data <- apply(methylation, MARGIN = 1, FUN = function(x) return(cor.test(as.numeric(x[-1:-3]), ages$Age, method = "pearson")$estimate))
+```{r data preparation, message=FALSE, warning=FALSE}
+ages <- read.table("ages.tsv", sep = "\t", header = 1)
+head(ages)
+methylation <- read.table("methylation.tsv", sep = "\t", header = 1, row.names = 1, na.strings = "NA")
+# print(methylation[1:5, 1:5])
+methylation[is.na(methylation)] = 0  # Change NA to 0
+# cor_data <- apply(methylation, MARGIN = 1, FUN = function(x) return(cor.test(as.numeric(x[-1:-3]), ages$Age, method = 
+# "pearson")$estimate))
+cor_data <- apply(methylation, MARGIN = 1, FUN = function(x) return(cor.test(as.numeric(x[-1:-3]), ages$Age, method = 
+"spearman")$estimate)) # С непараметрическим тестом, вышло годнее
 best_cor <- tail(sort(abs(cor_data)), n = 10)
-# plot(ages$Age, as.numeric(data[-1:-3]))
-# plot(ages$Age, methylation[64, -1:-3])
+best_cor
 data <- methylation[rownames(methylation) %in% names(best_cor), -1:-3]
 data <- t(data)
-# data <- gather(cbind(data, site = rownames(data)), key = site, value = meth_level)
-# colnames(data)[2] <- "patient"
-
 data <- cbind(data, age = ages["Age"])
 head(data)
 ```
 
-```{r ML}
+```{r wrapper function, message=FALSE, warning=FALSE}
 set.seed(123896527)
 
-validation <- sample(nrow(data), 10)
+test <- sample(nrow(data), 10)
 # training <- ages$Sample[!(ages$Sample %in% validation)]
 
-training_data <- data[-validation, ]
-validation_data <- data[validation,]
+train.data <- data[-test, ]
+test.data <- data[test, ]
 
 rmse <- function(real, predicted) {
   sqrt(sum((real - predicted) ^ 2) / length(real))
@@ -71,41 +67,131 @@ rmse <- function(real, predicted) {
 #' @export
 #'
 #' @examples
-wrapper <- function(training_data, training_response,
-                    validation_data, validation_response, 
+wrapper <- function(train.data, train.response,
+                    test.data, test.response, 
                     runs_number=50, ...) {
   
   training_rmse = vector()
   validation_rmse = vector()
-  for(i in 1:runs_number) {
-    
-    forest <- randomForest(Age ~ .,
-                       data = training_data,
-                       ...)
-    prediction_training <- predict(forest, training_data)
-    training_rmse[i] = rmse(training_response, prediction_training)
+  for (i in 1:runs_number) {
 
-    prediction_validation <- predict(forest, validation_data)
-    validation_rmse[i] = rmse(validation_response, prediction_validation)    
+    forest <- randomForest(Age ~ .,
+                       data = train.data,
+                       ...)
+    prediction_training <- predict(forest, train.data)
+    training_rmse[i] <-  rmse(train.response, prediction_training)
+
+    prediction_validation <- predict(forest, test.data)
+    validation_rmse[i] <-  rmse(test.response, prediction_validation)    
   }
   
   return(c(mean(training_rmse), mean(validation_rmse)))
   
 }
+```
 
-wrapper(training_data, training_data$Age, validation_data, validation_data$Age, 50, nodesize=1, replace=F, sampsize=20, mtry=5, ntree=100)
+# Оптимизируем ntree
+```{r ntree, message=FALSE, warning=FALSE}
+# results <- sapply(seq(1, 3000, 3), function(x) (wrapper(train.data, train.data$Age, test.data, test.data$Age, runs_number = 60, nodesize = 3, replace = T, sampsize = 20, mtry = 6, ntree = x))) # Я устал ждать генерации маркдауна
 
-training_data
+# write(results, "forest_results")
+results <- scan("forest_results")
+results_df <- data.frame(ntree = seq(1, 3000, 3))
+results_df$training <- results[seq(1, length(results), 2)]
+results_df$validation <- results[seq(2, length(results), 2)]
 
-forest <- randomForest(age ~ site+meth_level,
-                       data = training_data,
-                       importance = T, ntree = 99,
-                       replace = T,
-                       keep.forest = T,
-                       keep.inbag = T,
-                       nodesize=1,
-                       sampsize=300
-                       )
+ggplot(results_df[100:300, ], aes(x = ntree)) +
+  geom_line(aes(y = training, col = "blue")) +
+  geom_line(aes(y = validation, col = "green")) +
+  ylab("RMSE") 
+```
+Я решил, что 500 сойдет.
 
+# Оптимизируем replace и sampsize
+```{r replace and sampsize, message=FALSE, warning=FALSE}
+results_with_replace <- sapply(1:40, function(x) (wrapper(train.data, train.data$Age, test.data, test.data$Age, runs_number = 60, nodesize = 1, replace = T, sampsize = x, mtry = 10, ntree = 500)))
+write(results_with_replace, "forest_results_with_replace")
+
+results_without_replace <- sapply(1:40, function(x) (wrapper(train.data, train.data$Age, test.data, test.data$Age, runs_number = 60, nodesize = 1, replace = F, sampsize = x, mtry = 10, ntree = 500)))
+write(results_without_replace, "forest_results_without_replace")
+
+results_with_diff_sampsize_df <- data.frame(sampsize = 1:40)
+results_with_diff_sampsize_df$training_with_replace <- results_with_replace[1, ]
+results_with_diff_sampsize_df$validation_with_replace <- results_with_replace[2, ]
+results_with_diff_sampsize_df$training_without_replace <- results_without_replace[1, ]
+results_with_diff_sampsize_df$validation_without_replace <- results_without_replace[2, ]
+
+ggplot(results_with_diff_sampsize_df[10:35, ], aes(x = sampsize)) +
+  geom_line(aes(y = training_with_replace, col = "blue")) +
+  geom_line(aes(y = validation_with_replace, col = "green")) +
+  geom_line(aes(y = training_without_replace, col = "red")) +
+  geom_line(aes(y = validation_without_replace, col = "orange")) +
+  ylab("RMSE") +
+  scale_colour_discrete(name = "Parameters", labels= c("Training with replace", "Validation with replace",
+                                                        "Training without replace", "Validation without replace"))
+
+```
+Replace явно стоит включить, sampsize возьмем 17.
+
+# Выбираем nodesize
+```{r nodesize, message=FALSE, warning=FALSE}
+results_with_diff_nodesize <- sapply(1:40, function(x) (wrapper(train.data, train.data$Age, test.data, test.data$Age, runs_number = 60, nodesize = x, replace = T, sampsize = 17, mtry = 10, ntree = 500)))
+
+write(results_with_diff_nodesize, "forest_results_with_different_nodesize")
+results_with_diff_nodesize_df <- data.frame(nodesize = 1:40)
+results_with_diff_nodesize_df$training <- results_with_diff_nodesize[1, ]
+results_with_diff_nodesize_df$validation <- results_with_diff_nodesize[2, ]
+
+ggplot(results_with_diff_nodesize_df, aes(x = nodesize)) +
+  geom_line(aes(y = training, col = "blue")) +
+  geom_line(aes(y = validation, col = "green")) +
+  ylab("RMSE") +
+  scale_colour_discrete(name = "Parameters", labels= c("Training", "Validation"))
+
+# 5
+```
+Я как-то не сильно вижу переобучение, так как на валидирующей выборке ошибка тоже падает. Решил взять 2.
+
+# Оптимизируем nodesize 
+```{r mtree, message=FALSE, warning=FALSE}
+results_with_diff_mtry <- sapply(1:10, function(x) (wrapper(train.data, train.data$Age, test.data, test.data$Age, runs_number = 60, nodesize = 2, replace = T, sampsize = 17, mtry = x, ntree = 500)))
+
+results_with_diff_mtry_df <- data.frame(mtry = 1:10)
+results_with_diff_mtry_df$training <- results_with_diff_mtry[1, ]
+results_with_diff_mtry_df$validation <- results_with_diff_mtry[2, ]
+
+ggplot(results_with_diff_mtry_df, aes(x = mtry)) +
+  geom_line(aes(y = training, col = "blue")) +
+  geom_line(aes(y = validation, col = "green")) +
+  ylab("RMSE") +
+  scale_colour_discrete(name = "Parameters", labels= c("Training", "Validation"))
+
+#2
+```
+Тут как-то вообще грустно, столько бесполезных данных, возьмем 2. Было неплохо еще знать какие лучше брать.
+
+# Ж - кросс-валидация
+```{r cross-validation, message=FALSE, warning=FALSE}
+dim(data)
+
+set.seed(7856674)
+cross.validation <- matrix(sample(1:50, 50), nrow = 5, ncol = 10)
+cross.validation 
+
+cross.results <- apply(cross.validation, 1, function(test.sample){
+  # using each part as testing dataset
+  # using rest of the dataset as training dataset
+  train.sample <- (1:50)[-test.sample]
+  train.data <- data[train.sample, ]
+  train.response <- train.data$Age
+  test.data <- data[test.sample, ]
+  test.response <- test.data$Age
+  
+  # calculating RMSE for every part and default random forest
+  return(wrapper(train.data, train.response, test.data, test.response, runs_number = 100, nodesize = 2, replace = T, sampsize = 17, mtry = 2, ntree = 500))
+})
+
+print(cross.results)
+print(rowMeans(cross.results))
 ```
 
