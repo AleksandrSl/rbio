@@ -38,18 +38,9 @@ head(data)
 ```
 
 ```{r wrapper function, message=FALSE, warning=FALSE}
-set.seed(123896527)
-
-test <- sample(nrow(data), 10)
-# training <- ages$Sample[!(ages$Sample %in% validation)]
-
-train.data <- data[-test, ]
-test.data <- data[test, ]
-
 rmse <- function(real, predicted) {
   sqrt(sum((real - predicted) ^ 2) / length(real))
 }
-
 
 #' randomForest wrapper and error estimator
 #'
@@ -86,12 +77,22 @@ wrapper <- function(train.data, train.response,
   }
   
   return(c(mean(training_rmse), mean(validation_rmse)))
-  
+
 }
+```
+# Разобъем на тренировочную и валидирующие выборки
+```{r split data, message=FALSE, warning=FALSE}
+
+set.seed(123896527)
+test <- sample(nrow(data), 10)
+
+train.data <- data[-test, ]
+test.data <- data[test, ]
+
 ```
 
 # Оптимизируем ntree
-```{r ntree, message=FALSE, warning=FALSE}
+```{r ntree, message=FALSE, warning=FALSE, cache=TRUE}
 # results <- sapply(seq(1, 3000, 3), function(x) (wrapper(train.data, train.data$Age, test.data, test.data$Age, runs_number = 60, nodesize = 3, replace = T, sampsize = 20, mtry = 6, ntree = x))) # Я устал ждать генерации маркдауна
 
 # write(results, "forest_results")
@@ -103,12 +104,15 @@ results_df$validation <- results[seq(2, length(results), 2)]
 ggplot(results_df[100:300, ], aes(x = ntree)) +
   geom_line(aes(y = training, col = "blue")) +
   geom_line(aes(y = validation, col = "green")) +
-  ylab("RMSE") 
+  ylab("RMSE") +
+  scale_colour_discrete(name = "Dataset", labels= c("Train", "Test")) +
+  ggtitle("Optimize ntree")
 ```
+
 Я решил, что 500 сойдет.
 
 # Оптимизируем replace и sampsize
-```{r replace and sampsize, message=FALSE, warning=FALSE}
+```{r replace and sampsize, message=FALSE, warning=FALSE, cache=TRUE}
 results_with_replace <- sapply(1:40, function(x) (wrapper(train.data, train.data$Age, test.data, test.data$Age, runs_number = 60, nodesize = 1, replace = T, sampsize = x, mtry = 10, ntree = 500)))
 write(results_with_replace, "forest_results_with_replace")
 
@@ -127,14 +131,16 @@ ggplot(results_with_diff_sampsize_df[10:35, ], aes(x = sampsize)) +
   geom_line(aes(y = training_without_replace, col = "red")) +
   geom_line(aes(y = validation_without_replace, col = "orange")) +
   ylab("RMSE") +
-  scale_colour_discrete(name = "Parameters", labels= c("Training with replace", "Validation with replace",
-                                                        "Training without replace", "Validation without replace"))
+  ggtitle("Optimize replace and sampsize") +
+  scale_colour_discrete(name = "Dataset", labels= c("Train with replace", "Test with replace",
+                                                        "Train without replace", "Test without replace"))
 
 ```
+
 Replace явно стоит включить, sampsize возьмем 17.
 
 # Выбираем nodesize
-```{r nodesize, message=FALSE, warning=FALSE}
+```{r nodesize, message=FALSE, warning=FALSE, cache=TRUE}
 results_with_diff_nodesize <- sapply(1:40, function(x) (wrapper(train.data, train.data$Age, test.data, test.data$Age, runs_number = 60, nodesize = x, replace = T, sampsize = 17, mtry = 10, ntree = 500)))
 
 write(results_with_diff_nodesize, "forest_results_with_different_nodesize")
@@ -146,14 +152,14 @@ ggplot(results_with_diff_nodesize_df, aes(x = nodesize)) +
   geom_line(aes(y = training, col = "blue")) +
   geom_line(aes(y = validation, col = "green")) +
   ylab("RMSE") +
-  scale_colour_discrete(name = "Parameters", labels= c("Training", "Validation"))
-
-# 5
+  ggtitle("Optimize nodesize") +
+  scale_colour_discrete(name = "Dataset", labels= c("Train", "Test"))
 ```
+
 Я как-то не сильно вижу переобучение, так как на валидирующей выборке ошибка тоже падает. Решил взять 2.
 
 # Оптимизируем nodesize 
-```{r mtree, message=FALSE, warning=FALSE}
+```{r mtree, message=FALSE, warning=FALSE, cache=TRUE}
 results_with_diff_mtry <- sapply(1:10, function(x) (wrapper(train.data, train.data$Age, test.data, test.data$Age, runs_number = 60, nodesize = 2, replace = T, sampsize = 17, mtry = x, ntree = 500)))
 
 results_with_diff_mtry_df <- data.frame(mtry = 1:10)
@@ -164,17 +170,17 @@ ggplot(results_with_diff_mtry_df, aes(x = mtry)) +
   geom_line(aes(y = training, col = "blue")) +
   geom_line(aes(y = validation, col = "green")) +
   ylab("RMSE") +
-  scale_colour_discrete(name = "Parameters", labels= c("Training", "Validation"))
-
-#2
+  ggtitle("Optimize mtry") +
+  scale_colour_discrete(name = "Parameters", labels = c("Train", "Test"))
 ```
+
 Тут как-то вообще грустно, столько бесполезных данных, возьмем 2. Было неплохо еще знать какие лучше брать.
 
 # Ж - кросс-валидация
-```{r cross-validation, message=FALSE, warning=FALSE}
+```{r cross-validation, message=FALSE, warning=FALSE, cache=TRUE}
 dim(data)
 
-set.seed(7856674)
+set.seed(18644591)
 cross.validation <- matrix(sample(1:50, 50), nrow = 5, ncol = 10)
 cross.validation 
 
@@ -193,5 +199,61 @@ cross.results <- apply(cross.validation, 1, function(test.sample){
 
 print(cross.results)
 print(rowMeans(cross.results))
+
+# Standard parameters
+
+cross.results.standard <- apply(cross.validation, 1, function(test.sample){
+  # using each part as testing dataset
+  # using rest of the dataset as training dataset
+  train.sample <- (1:50)[-test.sample]
+  train.data <- data[train.sample, ]
+  train.response <- train.data$Age
+  test.data <- data[test.sample, ]
+  test.response <- test.data$Age
+  
+  # calculating RMSE for every part and default random forest
+  return(wrapper(train.data, train.response, test.data, test.response))
+})
+
 ```
 
+# Результаты кросс-валидации
+
+Мои параметры: `r rowMeans(cross.results)`
+
+Параметры по умолчанию: `r rowMeans(cross.results.standard)`
+
+![classic](hahaha-classic-3602179.png)
+
+## Вывод - жизнь боль, параметры по умолчанию меня сделали
+
+
+# Больше оверфиттинга богу оверфиттинга
+
+```{r overfit-maximum, message=FALSE, warning=FALSE, cache=TRUE}
+are_you_sick <- function(x) {
+  set.seed(x)
+  cross.validation <- matrix(sample(1:50, 50), nrow = 5, ncol = 10)
+  cross.validation 
+
+  cross.results <- apply(cross.validation, 1, function(test.sample){
+    # using each part as testing dataset
+    # using rest of the dataset as training dataset
+    train.sample <- (1:50)[-test.sample]
+    train.data <- data[train.sample, ]
+    train.response <- train.data$Age
+    test.data <- data[test.sample, ]
+    test.response <- test.data$Age
+  
+  # calculating RMSE for every part and default random forest
+    return(wrapper(train.data, train.response, test.data, test.response, runs_number = 100, nodesize = 2, replace = T, sampsize = 17, mtry = 2, ntree = 500))
+  })
+  return(c(x, rowMeans(cross.results)))
+}
+
+# more_overfit <- sapply(sample(1:50000000, 500), are_you_sick)
+
+# res <- scan("results3")
+# res[(res == min(res[seq(3, length(res), 3)])) - 2]
+# res[600-17]
+```
