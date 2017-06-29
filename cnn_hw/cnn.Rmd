@@ -1,0 +1,131 @@
+---
+title: "cnn"
+author: "aslepchenkov"
+date: "June 30, 2017"
+output: html_document
+---
+```{r}
+library(OpenImageR)
+library(mxnet)
+library(magick)
+library(stringi)
+```
+
+
+```{r create modified images}
+set.seed(131242351)
+
+modify_image <- function(flip_mode, shift_cols, shift_rows, rotate_angle, new_image_name, patch) {
+  
+  if (is.na(flip_mode)) {
+    patchAugmented <- Augmentation(patch, shift_cols = shift_cols, shift_rows = shift_rows,
+                                   rotate_angle = rotate_angle, rotate_method = 'bilinear', 
+                                   zca_comps = 30,zca_epsilon = 0.1, threads = 1, verbose = F)
+  } else {
+    patchAugmented <- Augmentation(patch, flip_mode = flip_mode,
+             shift_cols = shift_cols, shift_rows = shift_rows,
+             rotate_angle = rotate_angle, rotate_method = 'bilinear', 
+             zca_comps = 30,zca_epsilon = 0.1, threads = 1, verbose = F)
+  }
+  writeImage(patchAugmented, new_image_name)
+}
+
+for (file in list.files("patches", full.names = T)) {
+  
+  print(file)
+  patch <- readImage(file)
+  file_basename <- stri_split_fixed(basename(file), '.')[[1]][1]
+  file_dir <- dirname(file)
+  flip_mode <- sample(c('horizontal', 'vertical', NA), size = 50, replace = T)
+  shift_cols <- sample(-15:15, size = 50, replace = T)
+  shift_rows <- sample(-15:15, size = 50, replace = T)
+  rotate_angle <- sample(seq(0, 360, by = 15), size = 50, replace = T)
+  new_file_names <- c()
+  for (i in 1:50) {
+    new_file_names[i] <- stri_join("modified_patches/", file_basename, "_", i,".jpg")
+  }
+  # image(patchAugmented, col=grays)
+  mapply(modify_image, flip_mode, shift_cols, shift_rows, rotate_angle, new_file_names, MoreArgs = list(patch))
+  print(file)
+}
+
+
+```
+
+```{r make subsets and construct net}
+training <- sample(1:168, 134, replace = F)
+testing <- (1:168)[-training]
+training_full <- c()
+for (i in training) {
+  print(i)
+  print(seq(50 * i, 50*(i+1), by=1))
+  training_full[(50*i-1):i*50] <- seq(50 * (i - 1), 50*i, by=1) 
+}
+ 
+testing_full <- sapply(testing, function(x) rep(x, 50))
+# 
+features <- 61 * 61
+dataset.size <- 168 * 50
+# 
+nn.data.x <- matrix(0, nrow=dataset.size, ncol=features)
+nn.data.y <- vector(length=dataset.size)
+# 
+dim(nn.data.x)
+
+for (i in 1:168) {
+ for (j in 1:50) {
+   print(sprintf("modified_patches/patch%s_%s.jpg", i, j))
+   image <- image_read(sprintf("modified_patches/patch%s_%s.jpg", i, j))
+   print((i - 1) * 50 + j)
+   nn.data.x[(i - 1) * 50 + j, ] <- as.numeric(image[[1]][1, , ])
+ }
+}
+
+nn.data.y <- rep(read.csv("patch_labels.csv", header = F)$V1, 50)
+
+data <- mx.symbol.Variable('data')
+conv.0 <- mx.symbol.Convolution(data = data, kernel = c(5, 5), num_filter = 10)
+tanh.0 <- mx.symbol.LeakyReLU(conv.0, slope=0)
+pool.0 <- mx.symbol.Pooling(data=tanh.0, kernel=c(2, 2), stride=c(2, 2), pool.type="max")
+conv.1 <- mx.symbol.Convolution(data = pool.0, kernel = c(5, 5), num_filter = 10)
+tanh.1 <- mx.symbol.LeakyReLU(conv.1, slope=0)
+pool.1 <- mx.symbol.Pooling(data=tanh.1, kernel=c(2, 2), stride=c(2, 2), pool.type="max")
+fc.0 <- mx.symbol.FullyConnected(data = pool.1, num_hidden =3)
+nn.model <- mx.symbol.SoftmaxOutput(data = fc.0)
+
+train.x <- nn.data.x[training, ]
+train.y <- nn.data.y[training] 
+test.x <- nn.data.x[testing, ]
+test.y <- nn.data.y[testing] 
+
+
+
+train.array <- t(train.x)
+dim(train.x)
+dim(train.array) <- c(61, 61, 1, ncol(train.array))
+test.array <- t(test.x)
+dim(test.x)
+dim(test.array) <- c(61, 61, 1, ncol(test.array))
+
+new.train.array <- ((train.array / 255) - 0.5) * 2
+new.test.array <- ((test.array / 255) - 0.5) * 2
+```
+
+```{r train net}
+mx.set.seed(1)
+model <- mx.model.FeedForward.create(nn.model, 
+                                     X = new.train.array, 
+                                     y = train.y,
+                                     eval.data = list(
+                                       data = new.test.array,
+                                       label = test.y
+                                     ),
+                                     ctx = mx.cpu(), 
+                                     num.round = 50,
+                                     optimizer = "adadelta",
+                                     eval.metric = mx.metric.accuracy,
+                                     epoch.end.callback = mx.callback.log.train.metric(10))
+
+preds <- predict(model, new.train.array)
+preds[10:123]
+```
