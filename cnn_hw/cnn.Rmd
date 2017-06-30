@@ -6,6 +6,7 @@ output: html_document
 ---
 ```{r}
 library(OpenImageR)
+library(viridis)
 library(mxnet)
 library(magick)
 library(stringi)
@@ -54,15 +55,16 @@ for (file in list.files("patches", full.names = T)) {
 
 ```{r make subsets and construct net}
 training <- sample(1:168, 134, replace = F)
-testing <- (1:168)[-training]
-training_full <- c()
-for (i in training) {
+training_full <- rep(0, 134*50)
+for (i in 1:134) {
   print(i)
-  print(seq(50 * i, 50*(i+1), by=1))
-  training_full[(50*i-1):i*50] <- seq(50 * (i - 1), 50*i, by=1) 
+  print(length(seq(50 * (training[i] - 1) + 1, 50* training[i] , by=1)))
+  training_full[((50*(i-1)) + 1):(i*50)] <- seq(50 * (training[i] - 1) + 1, 50 * training[i] , by=1)
 }
+
+length(training_full)
+testing <- (1:(168*50))[-training_full]
  
-testing_full <- sapply(testing, function(x) rep(x, 50))
 # 
 features <- 61 * 61
 dataset.size <- 168 * 50
@@ -93,8 +95,8 @@ pool.1 <- mx.symbol.Pooling(data=tanh.1, kernel=c(2, 2), stride=c(2, 2), pool.ty
 fc.0 <- mx.symbol.FullyConnected(data = pool.1, num_hidden =3)
 nn.model <- mx.symbol.SoftmaxOutput(data = fc.0)
 
-train.x <- nn.data.x[training, ]
-train.y <- nn.data.y[training] 
+train.x <- nn.data.x[training_full, ]
+train.y <- nn.data.y[training_full] 
 test.x <- nn.data.x[testing, ]
 test.y <- nn.data.y[testing] 
 
@@ -112,7 +114,7 @@ new.test.array <- ((test.array / 255) - 0.5) * 2
 ```
 
 ```{r train net}
-mx.set.seed(1)
+mx.set.seed(1345235)
 model <- mx.model.FeedForward.create(nn.model, 
                                      X = new.train.array, 
                                      y = train.y,
