@@ -65,62 +65,64 @@ for (i in 1:134) {
 length(training_full)
 testing <- (1:(168*50))[-training_full]
  
-# 
+ 
 features <- 61 * 61
 dataset.size <- 168 * 50
-# 
+ 
 nn.data.x <- matrix(0, nrow=dataset.size, ncol=features)
 nn.data.y <- vector(length=dataset.size)
-# 
-dim(nn.data.x)
-
+ 
 for (i in 1:168) {
  for (j in 1:50) {
    print(sprintf("modified_patches/patch%s_%s.jpg", i, j))
    image <- image_read(sprintf("modified_patches/patch%s_%s.jpg", i, j))
-   print((i - 1) * 50 + j)
    nn.data.x[(i - 1) * 50 + j, ] <- as.numeric(image[[1]][1, , ])
  }
 }
 
 nn.data.y <- rep(read.csv("patch_labels.csv", header = F)$V1, each = 50)
 
-rep(1:3, 3)
-rep(1:3, each =3)
-
 data <- mx.symbol.Variable('data')
 conv.0 <- mx.symbol.Convolution(data = data, kernel = c(5, 5), num_filter = 10)
-tanh.0 <- mx.symbol.LeakyReLU(conv.0, slope=0)
+tanh.0 <- mx.symbol.Activation(conv.0, act_type="tanh")
 pool.0 <- mx.symbol.Pooling(data=tanh.0, kernel=c(2, 2), stride=c(2, 2), pool.type="max")
 conv.1 <- mx.symbol.Convolution(data = pool.0, kernel = c(5, 5), num_filter = 10)
-tanh.1 <- mx.symbol.LeakyReLU(conv.1, slope=0)
+tanh.1 <- mx.symbol.Activation(conv.1, act_type="tanh")
 pool.1 <- mx.symbol.Pooling(data=tanh.1, kernel=c(2, 2), stride=c(2, 2), pool.type="max")
 fc.0 <- mx.symbol.FullyConnected(data = pool.1, num_hidden =3)
 nn.model <- mx.symbol.SoftmaxOutput(data = fc.0)
+
+graph.viz(nn.model)
 
 train.x <- nn.data.x[training_full, ]
 train.y <- nn.data.y[training_full] 
 test.x <- nn.data.x[testing, ]
 test.y <- nn.data.y[testing] 
 
+# training_data_y <- nn_data_y[-validation_set_rows]
+# dim(training_data_x)[1] == length(train.y)
+# dim(training_data_x)[1] == length(test.y)
+
 
 
 train.array <- t(train.x)
 dim(train.x)
+length(train.y)
 dim(train.array) <- c(61, 61, 1, ncol(train.array))
 test.array <- t(test.x)
 dim(test.x)
+length(test.y)
 dim(test.array) <- c(61, 61, 1, ncol(test.array))
 ```
 
 ```{r train net}
-mx.set.seed(1345235)
+mx.set.seed(13535)
 model <- mx.model.FeedForward.create(nn.model, 
                                      X = new.train.array, 
-                                     y = train.y,
+                                     y = as.array(train.y-1),
                                      eval.data = list(
                                        data = new.test.array,
-                                       label = test.y
+                                       label = as.array(test.y-1)#test.y
                                      ),
                                      ctx = mx.cpu(), 
                                      num.round = 50,
