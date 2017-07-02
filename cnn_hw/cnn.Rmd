@@ -4,16 +4,15 @@ author: "aslepchenkov"
 date: "June 30, 2017"
 output: html_document
 ---
-```{r}
+```{r libraries}
 library(OpenImageR)
-library(viridis)
 library(mxnet)
 library(magick)
 library(stringi)
 ```
 
-
-```{r create modified images}
+## Modify images
+```{r create modified images, message=FALSE, warning=FALSE, cache=TRUE, eval=FALSE}
 set.seed(131242351)
 
 modify_image <- function(flip_mode, shift_cols, shift_rows, rotate_angle, new_image_name, patch) {
@@ -45,7 +44,6 @@ for (file in list.files("patches", full.names = T)) {
   for (i in 1:50) {
     new_file_names[i] <- stri_join("modified_patches/", file_basename, "_", i,".jpg")
   }
-  # image(patchAugmented, col=grays)
   mapply(modify_image, flip_mode, shift_cols, shift_rows, rotate_angle, new_file_names, MoreArgs = list(patch))
   print(file)
 }
@@ -53,35 +51,8 @@ for (file in list.files("patches", full.names = T)) {
 
 ```
 
-```{r make subsets and construct net}
-training <- sample(1:168, 134, replace = F)
-training_full <- rep(0, 134*50)
-for (i in 1:134) {
-  print(i)
-  print(length(seq(50 * (training[i] - 1) + 1, 50* training[i] , by=1)))
-  training_full[((50*(i-1)) + 1):(i*50)] <- seq(50 * (training[i] - 1) + 1, 50 * training[i] , by=1)
-}
-
-length(training_full)
-testing <- (1:(168*50))[-training_full]
- 
- 
-features <- 61 * 61
-dataset.size <- 168 * 50
- 
-nn.data.x <- matrix(0, nrow=dataset.size, ncol=features)
-nn.data.y <- vector(length=dataset.size)
- 
-for (i in 1:168) {
- for (j in 1:50) {
-   print(sprintf("modified_patches/patch%s_%s.jpg", i, j))
-   image <- image_read(sprintf("modified_patches/patch%s_%s.jpg", i, j))
-   nn.data.x[(i - 1) * 50 + j, ] <- as.numeric(image[[1]][1, , ])
- }
-}
-
-nn.data.y <- rep(read.csv("patch_labels.csv", header = F)$V1, each = 50)
-
+## Construct neuronal network
+```{r construct net, message=FALSE, warning=FALSE}
 data <- mx.symbol.Variable('data')
 conv.0 <- mx.symbol.Convolution(data = data, kernel = c(5, 5), num_filter = 10)
 tanh.0 <- mx.symbol.Activation(conv.0, act_type="tanh")
@@ -93,43 +64,182 @@ fc.0 <- mx.symbol.FullyConnected(data = pool.1, num_hidden =3)
 nn.model <- mx.symbol.SoftmaxOutput(data = fc.0)
 
 graph.viz(nn.model)
+```
+
+## Make train and test subsets
+```{r make subsets, message=FALSE, warning=FALSE, eval=FALSE}
+# Select train samples from initial 168 files
+training <- sample(1:168, 134, replace = F)
+training_full <- rep(0, 134*50)
+# Since we've modified initial files 50 times, train samples should be corrected
+for (i in 1:134) {
+  training_full[((50*(i - 1)) + 1):(i * 50)] <- (50 * (training[i] - 1) + 1 ):(50 * training[i])
+}
+
+testing <- (1:(168*50))[-training_full]
+ 
+
+features <- 61 * 61
+dataset.size <- 168 * 50
+ 
+nn.data.x <- matrix(0, nrow=dataset.size, ncol=features)
+nn.data.y <- vector(length=dataset.size)
+ 
+# Read data
+for (i in 1:168) {
+ for (j in 1:50) {
+   print(sprintf("modified_patches/patch%s_%s.jpg", i, j))
+   nn.data.x[(i - 1) * 50 + j, ] <- as.numeric(readImage(sprintf("modified_patches/patch%s_%s.jpg", i, j)))
+ }
+}
+
+nn.data.y <- rep(read.csv("patch_labels.csv", header = F)$V1, each = 50)
+
 
 train.x <- nn.data.x[training_full, ]
 train.y <- nn.data.y[training_full] 
 test.x <- nn.data.x[testing, ]
 test.y <- nn.data.y[testing] 
 
-# training_data_y <- nn_data_y[-validation_set_rows]
-# dim(training_data_x)[1] == length(train.y)
-# dim(training_data_x)[1] == length(test.y)
-
-
-
 train.array <- t(train.x)
-dim(train.x)
-length(train.y)
 dim(train.array) <- c(61, 61, 1, ncol(train.array))
 test.array <- t(test.x)
-dim(test.x)
-length(test.y)
 dim(test.array) <- c(61, 61, 1, ncol(test.array))
 ```
 
-```{r train net}
-mx.set.seed(13535)
+## Train net
+```{r train net, eval=FALSE, message=FALSE, warning=FALSE}
+mx.set.seed(3774)
 model <- mx.model.FeedForward.create(nn.model, 
                                      X = new.train.array, 
-                                     y = as.array(train.y-1),
+                                     y = as.array(train.y - 1),
                                      eval.data = list(
                                        data = new.test.array,
-                                       label = as.array(test.y-1)#test.y
+                                       label = as.array(test.y - 1)#test.y
                                      ),
                                      ctx = mx.cpu(), 
-                                     num.round = 50,
+                                     num.round = 200,
                                      optimizer = "adadelta",
                                      eval.metric = mx.metric.accuracy,
                                      epoch.end.callback = mx.callback.log.train.metric(10))
-
-preds <- predict(model, new.train.array)
-preds[10:123]
 ```
+
+## Results
+
+Start training with 1 devices
+
+[1] Train-accuracy=0.348106971153846
+
+[1] Validation-accuracy=0.236049107142857
+
+[2] Train-accuracy=0.34094929245283
+
+...
+
+[70] Train-accuracy=0.531544811320755
+
+[70] Validation-accuracy=0.309151785714286
+
+[71] Train-accuracy=0.498378537735849
+
+[71] Validation-accuracy=0.335379464285714
+
+[72] Train-accuracy=0.481426886792453
+
+[72] Validation-accuracy=0.440290178571429
+
+[73] Train-accuracy=0.446639150943396
+
+[73] Validation-accuracy=0.329799107142857
+
+[74] Train-accuracy=0.520931603773585
+
+[74] Validation-accuracy=0.41796875
+
+[75] Train-accuracy=0.519162735849057
+
+[75] Validation-accuracy=0.328683035714286
+
+[76] Train-accuracy=0.516214622641509
+
+[76] Validation-accuracy=0.299665178571429
+
+[77] Train-accuracy=0.448260613207547
+
+[110] Train-accuracy=0.626031839622642
+
+[110] Validation-accuracy=0.339285714285714
+
+[111] Train-accuracy=0.609817216981132
+
+[111] Validation-accuracy=0.295200892857143
+
+[112] Train-accuracy=0.6015625
+
+[112] Validation-accuracy=0.342075892857143
+
+[113] Train-accuracy=0.40123820754717
+
+[113] Validation-accuracy=0.41015625
+
+[114] Train-accuracy=0.518278301886792
+
+[114] Validation-accuracy=0.329241071428571
+
+[115] Train-accuracy=0.645931603773585
+
+[115] Validation-accuracy=0.340401785714286
+
+[116] Train-accuracy=0.638119103773585
+
+[116] Validation-accuracy=0.337053571428571
+
+[117] Train-accuracy=0.619103773584906
+
+[117] Validation-accuracy=0.248883928571429
+
+[118] Train-accuracy=0.448408018867925
+
+[118] Validation-accuracy=0.350446428571429
+
+[119] Train-accuracy=0.620725235849057
+
+[119] Validation-accuracy=0.337611607142857
+
+[120] Train-accuracy=0.645931603773585
+
+[120] Validation-accuracy=0.348772321428571
+
+[121] Train-accuracy=0.645784198113208
+
+[121] Validation-accuracy=0.327566964285714
+
+[122] Train-accuracy=0.636645047169811
+
+[122] Validation-accuracy=0.329241071428571
+
+[123] Train-accuracy=0.623083726415094
+
+[123] Validation-accuracy=0.306361607142857
+
+[124] Train-accuracy=0.660524764150943
+
+[124] Validation-accuracy=0.345424107142857
+
+[125] Train-accuracy=0.664652122641509
+
+[125] Validation-accuracy=0.322544642857143
+
+[126] Train-accuracy=0.668042452830189
+
+[126] Validation-accuracy=0.328125
+
+[127] Train-accuracy=0.658903301886792
+
+[127] Validation-accuracy=0.310267857142857
+
+...
+
+[200] Train-accuracy=0.78626179245283
+
+[200] Validation-accuracy=0.315848214285714
