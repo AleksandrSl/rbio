@@ -63,11 +63,11 @@ pool.1 <- mx.symbol.Pooling(data=tanh.1, kernel=c(2, 2), stride=c(2, 2), pool.ty
 fc.0 <- mx.symbol.FullyConnected(data = pool.1, num_hidden =3)
 nn.model <- mx.symbol.SoftmaxOutput(data = fc.0)
 
-graph.viz(nn.model)
+# graph.viz(nn.model)
 ```
 
 ## Make train and test subsets
-```{r make subsets, message=FALSE, warning=FALSE, eval=FALSE}
+```{r make subsets, message=FALSE, warning=FALSE, include=FALSE}
 # Select train samples from initial 168 files
 training <- sample(1:168, 134, replace = F)
 training_full <- rep(0, 134*50)
@@ -88,7 +88,7 @@ nn.data.y <- vector(length=dataset.size)
 # Read data
 for (i in 1:168) {
  for (j in 1:50) {
-   print(sprintf("modified_patches/patch%s_%s.jpg", i, j))
+   # print(sprintf("modified_patches/patch%s_%s.jpg", i, j))
    nn.data.x[(i - 1) * 50 + j, ] <- as.numeric(readImage(sprintf("modified_patches/patch%s_%s.jpg", i, j)))
  }
 }
@@ -109,137 +109,329 @@ dim(test.array) <- c(61, 61, 1, ncol(test.array))
 
 ## Train net
 ```{r train net, eval=FALSE, message=FALSE, warning=FALSE}
-mx.set.seed(3774)
+mx.set.seed(1)
 model <- mx.model.FeedForward.create(nn.model, 
-                                     X = new.train.array, 
+                                     X = train.array, 
                                      y = as.array(train.y - 1),
                                      eval.data = list(
-                                       data = new.test.array,
-                                       label = as.array(test.y - 1)#test.y
+                                       data = test.array,
+                                       label = as.array(test.y - 1)
                                      ),
                                      ctx = mx.cpu(), 
-                                     num.round = 200,
+                                     num.round = 100,
                                      optimizer = "adadelta",
                                      eval.metric = mx.metric.accuracy,
                                      epoch.end.callback = mx.callback.log.train.metric(10))
 ```
 
+
 ## Results
 
+  |...........................................................      |  91%
+label: train net (with options) 
+List of 3
+ $ echo   : logi TRUE
+ $ message: logi FALSE
+ $ warning: logi FALSE
+
 Start training with 1 devices
+[1] Train-accuracy=0.419471153846154
+[1] Validation-accuracy=0.303571428571429
 
-[1] Train-accuracy=0.348106971153846
+[2] Train-accuracy=0.521963443396226
+[2] Validation-accuracy=0.545758928571429
 
-[1] Validation-accuracy=0.236049107142857
+[3] Train-accuracy=0.537735849056604
+[3] Validation-accuracy=0.55859375
 
-[2] Train-accuracy=0.34094929245283
+[4] Train-accuracy=0.570459905660377
+[4] Validation-accuracy=0.465401785714286
 
-...
+[5] Train-accuracy=0.545106132075472
+[5] Validation-accuracy=0.547433035714286
 
-[70] Train-accuracy=0.531544811320755
+[6] Train-accuracy=0.60436320754717
+[6] Validation-accuracy=0.548549107142857
 
-[70] Validation-accuracy=0.309151785714286
+[7] Train-accuracy=0.597729952830189
+[7] Validation-accuracy=0.584821428571429
 
-[71] Train-accuracy=0.498378537735849
+[8] Train-accuracy=0.594044811320755
+[8] Validation-accuracy=0.540178571428571
 
-[71] Validation-accuracy=0.335379464285714
+[9] Train-accuracy=0.625294811320755
+[9] Validation-accuracy=0.567522321428571
 
-[72] Train-accuracy=0.481426886792453
+[10] Train-accuracy=0.626916273584906
+[10] Validation-accuracy=0.569754464285714
 
-[72] Validation-accuracy=0.440290178571429
+[11] Train-accuracy=0.625294811320755
+[11] Validation-accuracy=0.555245535714286
 
-[73] Train-accuracy=0.446639150943396
+[12] Train-accuracy=0.651827830188679
+[12] Validation-accuracy=0.579799107142857
 
-[73] Validation-accuracy=0.329799107142857
+[13] Train-accuracy=0.657724056603774
+[13] Validation-accuracy=0.579799107142857
 
-[74] Train-accuracy=0.520931603773585
+[14] Train-accuracy=0.661556603773585
+[14] Validation-accuracy=0.596540178571429
 
-[74] Validation-accuracy=0.41796875
+[15] Train-accuracy=0.676002358490566
+[15] Validation-accuracy=0.611607142857143
 
-[75] Train-accuracy=0.519162735849057
+[16] Train-accuracy=0.671580188679245
+[16] Validation-accuracy=0.501674107142857
 
-[75] Validation-accuracy=0.328683035714286
+[17] Train-accuracy=0.691774764150943
+[17] Validation-accuracy=0.508370535714286
 
-[76] Train-accuracy=0.516214622641509
+[18] Train-accuracy=0.698260613207547
+[18] Validation-accuracy=0.504464285714286
 
-[76] Validation-accuracy=0.299665178571429
+[19] Train-accuracy=0.71594929245283
+[19] Validation-accuracy=0.455357142857143
 
-[77] Train-accuracy=0.448260613207547
+[20] Train-accuracy=0.717718160377358
+[20] Validation-accuracy=0.580915178571429
 
-[110] Train-accuracy=0.626031839622642
+[21] Train-accuracy=0.738207547169811
+[21] Validation-accuracy=0.595982142857143
 
-[110] Validation-accuracy=0.339285714285714
+[22] Train-accuracy=0.755159198113208
+[22] Validation-accuracy=0.594308035714286
 
-[111] Train-accuracy=0.609817216981132
+[23] Train-accuracy=0.755306603773585
+[23] Validation-accuracy=0.504464285714286
 
-[111] Validation-accuracy=0.295200892857143
+[24] Train-accuracy=0.775353773584906
+[24] Validation-accuracy=0.579799107142857
 
-[112] Train-accuracy=0.6015625
+[25] Train-accuracy=0.774174528301887
+[25] Validation-accuracy=0.592633928571429
 
-[112] Validation-accuracy=0.342075892857143
+[26] Train-accuracy=0.787735849056604
+[26] Validation-accuracy=0.526785714285714
 
-[113] Train-accuracy=0.40123820754717
+[27] Train-accuracy=0.788620283018868
+[27] Validation-accuracy=0.578683035714286
 
-[113] Validation-accuracy=0.41015625
+[28] Train-accuracy=0.809994103773585
+[28] Validation-accuracy=0.514508928571429
 
-[114] Train-accuracy=0.518278301886792
+[29] Train-accuracy=0.804392688679245
+[29] Validation-accuracy=0.570870535714286
 
-[114] Validation-accuracy=0.329241071428571
+[30] Train-accuracy=0.835790094339623
+[30] Validation-accuracy=0.573660714285714
 
-[115] Train-accuracy=0.645931603773585
+[31] Train-accuracy=0.828567216981132
+[31] Validation-accuracy=0.559151785714286
 
-[115] Validation-accuracy=0.340401785714286
+[32] Train-accuracy=0.836379716981132
+[32] Validation-accuracy=0.576450892857143
 
-[116] Train-accuracy=0.638119103773585
+[33] Train-accuracy=0.84153891509434
+[33] Validation-accuracy=0.554129464285714
 
-[116] Validation-accuracy=0.337053571428571
+[34] Train-accuracy=0.848909198113208
+[34] Validation-accuracy=0.577566964285714
 
-[117] Train-accuracy=0.619103773584906
+[35] Train-accuracy=0.854658018867924
+[35] Validation-accuracy=0.556361607142857
 
-[117] Validation-accuracy=0.248883928571429
+[36] Train-accuracy=0.855542452830189
+[36] Validation-accuracy=0.566964285714286
 
-[118] Train-accuracy=0.448408018867925
+[37] Train-accuracy=0.875147405660377
+[37] Validation-accuracy=0.563616071428571
 
-[118] Validation-accuracy=0.350446428571429
+[38] Train-accuracy=0.870872641509434
+[38] Validation-accuracy=0.493303571428571
 
-[119] Train-accuracy=0.620725235849057
+[39] Train-accuracy=0.866745283018868
+[39] Validation-accuracy=0.564174107142857
 
-[119] Validation-accuracy=0.337611607142857
+[40] Train-accuracy=0.883549528301887
+[40] Validation-accuracy=0.556919642857143
 
-[120] Train-accuracy=0.645931603773585
+[41] Train-accuracy=0.883402122641509
+[41] Validation-accuracy=0.561941964285714
 
-[120] Validation-accuracy=0.348772321428571
+[42] Train-accuracy=0.8984375
+[42] Validation-accuracy=0.541294642857143
 
-[121] Train-accuracy=0.645784198113208
+[43] Train-accuracy=0.884433962264151
+[43] Validation-accuracy=0.552455357142857
 
-[121] Validation-accuracy=0.327566964285714
+[44] Train-accuracy=0.898290094339623
+[44] Validation-accuracy=0.563616071428571
 
-[122] Train-accuracy=0.636645047169811
+[45] Train-accuracy=0.905660377358491
+[45] Validation-accuracy=0.539620535714286
 
-[122] Validation-accuracy=0.329241071428571
+[46] Train-accuracy=0.88782429245283
+[46] Validation-accuracy=0.549665178571429
 
-[123] Train-accuracy=0.623083726415094
+[47] Train-accuracy=0.917452830188679
+[47] Validation-accuracy=0.534040178571429
 
-[123] Validation-accuracy=0.306361607142857
+[48] Train-accuracy=0.905070754716981
+[48] Validation-accuracy=0.539620535714286
 
-[124] Train-accuracy=0.660524764150943
+[49] Train-accuracy=0.928360849056604
+[49] Validation-accuracy=0.526785714285714
 
-[124] Validation-accuracy=0.345424107142857
+[50] Train-accuracy=0.908313679245283
+[50] Validation-accuracy=0.530133928571429
 
-[125] Train-accuracy=0.664652122641509
+[51] Train-accuracy=0.91966391509434
+[51] Validation-accuracy=0.5390625
 
-[125] Validation-accuracy=0.322544642857143
+[52] Train-accuracy=0.933372641509434
+[52] Validation-accuracy=0.540736607142857
 
-[126] Train-accuracy=0.668042452830189
+[53] Train-accuracy=0.941774764150943
+[53] Validation-accuracy=0.523995535714286
 
-[126] Validation-accuracy=0.328125
+[54] Train-accuracy=0.893130896226415
+[54] Validation-accuracy=0.531808035714286
 
-[127] Train-accuracy=0.658903301886792
+[55] Train-accuracy=0.939268867924528
+[55] Validation-accuracy=0.531808035714286
 
-[127] Validation-accuracy=0.310267857142857
+[56] Train-accuracy=0.919221698113208
+[56] Validation-accuracy=0.522879464285714
 
-...
+[57] Train-accuracy=0.942954009433962
+[57] Validation-accuracy=0.524553571428571
 
-[200] Train-accuracy=0.78626179245283
+[58] Train-accuracy=0.948997641509434
+[58] Validation-accuracy=0.533482142857143
 
-[200] Validation-accuracy=0.315848214285714
+[59] Train-accuracy=0.941627358490566
+[59] Validation-accuracy=0.491071428571429
+
+[60] Train-accuracy=0.929982311320755
+[60] Validation-accuracy=0.532924107142857
+
+[61] Train-accuracy=0.947081367924528
+[61] Validation-accuracy=0.540736607142857
+
+[62] Train-accuracy=0.95032429245283
+[62] Validation-accuracy=0.537946428571429
+
+[63] Train-accuracy=0.928803066037736
+[63] Validation-accuracy=0.521205357142857
+
+[64] Train-accuracy=0.956220518867924
+[64] Validation-accuracy=0.536272321428571
+
+[65] Train-accuracy=0.955778301886792
+[65] Validation-accuracy=0.529575892857143
+
+[66] Train-accuracy=0.95091391509434
+[66] Validation-accuracy=0.52734375
+
+[67] Train-accuracy=0.945902122641509
+[67] Validation-accuracy=0.5234375
+
+[68] Train-accuracy=0.959905660377358
+[68] Validation-accuracy=0.526785714285714
+
+[69] Train-accuracy=0.956367924528302
+[69] Validation-accuracy=0.520089285714286
+
+[70] Train-accuracy=0.948997641509434
+[70] Validation-accuracy=0.520089285714286
+
+[71] Train-accuracy=0.955630896226415
+[71] Validation-accuracy=0.529575892857143
+
+[72] Train-accuracy=0.971992924528302
+[72] Validation-accuracy=0.524553571428571
+
+[73] Train-accuracy=0.957694575471698
+[73] Validation-accuracy=0.529017857142857
+
+[74] Train-accuracy=0.951945754716981
+[74] Validation-accuracy=0.518973214285714
+
+[75] Train-accuracy=0.94811320754717
+[75] Validation-accuracy=0.525111607142857
+
+[76] Train-accuracy=0.971108490566038
+[76] Validation-accuracy=0.525669642857143
+
+[77] Train-accuracy=0.971845518867924
+[77] Validation-accuracy=0.529017857142857
+
+[78] Train-accuracy=0.961527122641509
+[78] Validation-accuracy=0.48046875
+
+[79] Train-accuracy=0.966096698113208
+[79] Validation-accuracy=0.533482142857143
+
+[80] Train-accuracy=0.960347877358491
+[80] Validation-accuracy=0.531808035714286
+
+[81] Train-accuracy=0.966096698113208
+[81] Validation-accuracy=0.531808035714286
+
+[82] Train-accuracy=0.977004716981132
+[82] Validation-accuracy=0.530691964285714
+
+[83] Train-accuracy=0.983490566037736
+[83] Validation-accuracy=0.524553571428571
+
+[84] Train-accuracy=0.952240566037736
+[84] Validation-accuracy=0.526785714285714
+
+[85] Train-accuracy=0.976709905660377
+[85] Validation-accuracy=0.529017857142857
+
+[86] Train-accuracy=0.96875
+[86] Validation-accuracy=0.526785714285714
+
+[87] Train-accuracy=0.968307783018868
+[87] Validation-accuracy=0.521763392857143
+
+[88] Train-accuracy=0.974793632075472
+[88] Validation-accuracy=0.529575892857143
+
+[89] Train-accuracy=0.981426886792453
+[89] Validation-accuracy=0.53125
+
+[90] Train-accuracy=0.964475235849057
+[90] Validation-accuracy=0.520647321428571
+
+[91] Train-accuracy=0.969044811320755
+[91] Validation-accuracy=0.522879464285714
+
+[92] Train-accuracy=0.985849056603774
+[92] Validation-accuracy=0.5078125
+
+[93] Train-accuracy=0.96875
+[93] Validation-accuracy=0.5234375
+
+[94] Train-accuracy=0.9765625
+[94] Validation-accuracy=0.536830357142857
+
+[95] Train-accuracy=0.974793632075472
+[95] Validation-accuracy=0.517299107142857
+
+[96] Train-accuracy=0.980247641509434
+[96] Validation-accuracy=0.524553571428571
+
+[97] Train-accuracy=0.97096108490566
+[97] Validation-accuracy=0.536830357142857
+
+[98] Train-accuracy=0.972877358490566
+[98] Validation-accuracy=0.544084821428571
+
+[99] Train-accuracy=0.97435141509434
+[99] Validation-accuracy=0.529575892857143
+
+[100] Train-accuracy=0.983932783018868
+[100] Validation-accuracy=0.527901785714286
+
